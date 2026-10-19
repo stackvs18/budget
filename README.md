@@ -32,7 +32,9 @@ On Windows you can double-click **`start.bat`** instead: it installs dependencie
 | Plan it | Tick the checkbox. *After plan* drops by its price. |
 | Mark it bought | Click its status (*Idea → Planned → Bought*). |
 | Edit anything | Click the name or price in the row. **Enter** in a price jumps to the next one. |
-| More options | The chevron opens quantity, category, note, link and **Delete** (undo from the message that appears). |
+| Reorder | Drag the ⋮⋮ handle, within a category or into another one (empty categories included). Keyboard: focus the handle, **Space**, arrow keys, **Space**. Works while sorting by *List order*. |
+| Delete | The bin icon at the end of the row. Undo from the message that appears. |
+| More options | The chevron opens quantity, category, priority, status, note and link. |
 | Set your balance | Click *Starting balance* or *Lowest I'll go* in the right column. |
 | Jump to a category | Click its name in the right column. |
 
@@ -165,6 +167,7 @@ src/
   lib/money.ts       currency formatting and the numbers-only input parser
   lib/migrate.ts     upgrades and validates saved or imported data
   lib/api.ts         storage: data server, or browser storage on static hosts
+  lib/reorder.ts     drag-and-drop moves
   components/list/      add bar, category sections, item rows
   components/summary/   right-hand numbers column
   components/settings/  settings panel tabs
@@ -181,4 +184,4 @@ render.yaml          Render blueprint
 
 ### Stack
 
-React 19, TypeScript, Vite, Tailwind CSS 4, zustand, Geist and Geist Mono (bundled locally), lucide icons, Vitest.
+React 19, TypeScript, Vite, Tailwind CSS 4, zustand, dnd-kit, Geist and Geist Mono (bundled locally), lucide icons, Vitest.

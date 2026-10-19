@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { fetchData, saveData, saveOnExit, type StorageMode } from '@/lib/api';
 import { SEED, migrate, uid } from '@/lib/migrate';
+import { moveItem, moveItemToCategory } from '@/lib/reorder';
 import type { BudgetData, Category, Display, Income, Item, Priority, Settings } from '@/types';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -125,6 +126,11 @@ export const actions = {
     update((d) => ({ ...d, items: d.items.filter((i) => i.id !== id) }));
     return { item: items[index], index };
   },
+  /** Drag and drop: puts `activeId` where `overId` is, taking on that item's category. */
+  moveItem: (activeId: string, overId: string) => update((d) => ({ ...d, items: moveItem(d.items, activeId, overId) })),
+  /** Drag and drop onto a category (e.g. an empty one): moves the item to the end of it. */
+  moveItemToCategory: (id: string, categoryId: string) =>
+    update((d) => ({ ...d, items: moveItemToCategory(d.items, id, categoryId) })),
   restoreItem: (item: Item, index: number) =>
     update((d) => ({ ...d, items: [...d.items.slice(0, index), item, ...d.items.slice(index)] })),
   toggleTick: (id: string) =>

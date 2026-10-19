@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CategorySection } from '@/components/list/CategorySection';
 import { MoneyInput, Select, TextTabs, fieldClass } from '@/components/ui/inputs';
 import { isTicked } from '@/lib/calc';
@@ -35,6 +37,19 @@ export function ItemsPanel() {
   const planned = items.filter((i) => i.status === 'planned');
 
   const visible = useMemo(() => visibleItems(items, { filter, sort, search, priorities }), [items, filter, sort, search, priorities]);
+
+  // A small movement threshold keeps clicks on the handle from starting a drag.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const overId = String(over.id);
+    if (overId.startsWith('category:')) actions.moveItemToCategory(String(active.id), overId.slice('category:'.length));
+    else actions.moveItem(String(active.id), overId);
+  };
 
   const untickAll = () => {
     const ids = planned.map((i) => i.id);
@@ -78,19 +93,21 @@ export function ItemsPanel() {
         </div>
       )}
 
-      {categories.map((category) => {
-        const shown = visible.filter((i) => i.categoryId === category.id);
-        if (filtered && !shown.length) return null;
-        return (
-          <CategorySection
-            key={category.id}
-            category={category}
-            allItems={items.filter((i) => i.categoryId === category.id)}
-            items={shown}
-            filtered={filtered}
-          />
-        );
-      })}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        {categories.map((category) => {
+          const shown = visible.filter((i) => i.categoryId === category.id);
+          if (filtered && !shown.length) return null;
+          return (
+            <CategorySection
+              key={category.id}
+              category={category}
+              allItems={items.filter((i) => i.categoryId === category.id)}
+              items={shown}
+              filtered={filtered}
+            />
+          );
+        })}
+      </DndContext>
 
       {!categories.length && (
         <div className="pt-16">

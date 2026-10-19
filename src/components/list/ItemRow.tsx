@@ -1,5 +1,7 @@
 import { memo } from 'react';
-import { ChevronDown, ExternalLink, StickyNote } from 'lucide-react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { ChevronDown, ExternalLink, GripVertical, StickyNote, Trash2 } from 'lucide-react';
 import { Field, MoneyInput, Select, TextInput, inlineClass } from '@/components/ui/inputs';
 import { useFormatter } from '@/hooks';
 import { cost } from '@/lib/calc';
@@ -24,15 +26,47 @@ const STATUS: Record<Status, { label: string; className: string }> = {
   bought: { label: 'Bought', className: 'bg-fg text-bg' },
 };
 
+/** Deletes straight away; the message that appears offers Undo. */
+function deleteItem(id: string) {
+  const { item, index } = actions.removeItem(id);
+  if (useUI.getState().expandedItem === id) useUI.setState({ expandedItem: null });
+  toast({ title: 'Deleted', body: item.name, action: { label: 'Undo', run: () => actions.restoreItem(item, index) } });
+}
+
 export const ItemRow = memo(function ItemRow({ item }: { item: Item }) {
   const expanded = useUI((s) => s.expandedItem === item.id);
   const priorities = useData((d) => d.priorities);
+  // Dragging follows list order, so it's only on when that's the sort.
+  const canDrag = useData((d) => d.display.sort === 'manual');
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !canDrag,
+  });
   const bought = item.status === 'bought';
   const href = safeUrl(item.link);
 
   return (
-    <li>
-      <div className={cn('item-grid -mx-2 px-2 py-[var(--row-py)] transition-colors hover:bg-raised', expanded && 'bg-raised')}>
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn('relative', isDragging && 'z-20 bg-bg shadow-[0_8px_24px_-8px_rgb(0_0_0/0.25)]')}
+    >
+      <div className={cn('item-grid -mx-2 px-2 py-[var(--row-py)] transition-colors hover:bg-raised', (expanded || isDragging) && 'bg-raised')}>
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          disabled={!canDrag}
+          aria-label={`Drag to reorder ${item.name}`}
+          title={canDrag ? 'Drag to reorder (or focus and use Space + arrow keys)' : 'Switch sort to “List order” to drag'}
+          className={cn(
+            'grid h-8 w-5 touch-none place-items-center text-faint [grid-area:grip]',
+            canDrag ? 'cursor-grab hover:text-fg active:cursor-grabbing' : 'cursor-not-allowed opacity-30',
+          )}
+        >
+          <GripVertical className="size-4" />
+        </button>
         <input
           type="checkbox"
           checked={item.status !== 'idea'}
@@ -103,6 +137,16 @@ export const ItemRow = memo(function ItemRow({ item }: { item: Item }) {
         >
           <ChevronDown className={cn('size-4', expanded && 'rotate-180')} />
         </button>
+
+        <button
+          type="button"
+          aria-label={`Delete ${item.name}`}
+          title="Delete (you can undo)"
+          onClick={() => deleteItem(item.id)}
+          className="grid size-8 place-items-center text-faint transition-colors hover:text-fg [grid-area:del]"
+        >
+          <Trash2 className="size-4" />
+        </button>
       </div>
 
       {expanded && <ItemDetails item={item} />}
@@ -115,16 +159,10 @@ function ItemDetails({ item }: { item: Item }) {
   const categories = useData((d) => d.categories);
   const priorities = useData((d) => d.priorities);
 
-  const remove = () => {
-    const { item: removed, index } = actions.removeItem(item.id);
-    useUI.setState({ expandedItem: null });
-    toast({ title: 'Deleted', body: removed.name, action: { label: 'Undo', run: () => actions.restoreItem(removed, index) } });
-  };
-
   const step = 'grid size-8 place-items-center text-muted hover:text-fg';
 
   return (
-    <div className="grid gap-x-6 gap-y-4 pt-2 pb-6 sm:grid-cols-4 sm:pl-7">
+    <div className="grid gap-x-6 gap-y-4 pt-2 pb-6 sm:grid-cols-4 sm:pl-12">
       <Field label="Quantity">
         <div className="flex h-9 items-center justify-between border-b border-line">
           <button type="button" aria-label="Less" className={step} onClick={() => actions.updateItem(item.id, { qty: Math.max(1, item.qty - 1) })}>−</button>
@@ -159,14 +197,9 @@ function ItemDetails({ item }: { item: Item }) {
       <Field label="Link" className="sm:col-span-2">
         <TextInput value={item.link} type="url" maxLength={2000} placeholder="https://…" onValueChange={(link) => actions.updateItem(item.id, { link: link.trim() })} />
       </Field>
-      <div className="flex items-center justify-between gap-4 sm:col-span-4">
-        <span className="font-mono text-[12px] text-muted tabular-nums">
-          {item.price == null ? 'No price yet' : item.qty > 1 ? `${fmt.money(item.price)} × ${item.qty} = ${fmt.money(cost(item))}` : fmt.money(cost(item))}
-        </span>
-        <button type="button" onClick={remove} className="h-8 font-mono text-[12px] text-muted uppercase hover:text-fg">
-          Delete
-        </button>
-      </div>
+      <p className="font-mono text-[12px] text-muted tabular-nums sm:col-span-4">
+        {item.price == null ? 'No price yet' : item.qty > 1 ? `${fmt.money(item.price)} × ${item.qty} = ${fmt.money(cost(item))}` : fmt.money(cost(item))}
+      </p>
     </div>
   );
 }

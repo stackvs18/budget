@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { ItemRow } from '@/components/list/ItemRow';
 import { Badge, MoneyInput, fieldClass } from '@/components/ui/inputs';
 import { useFormatter } from '@/hooks';
@@ -21,9 +23,11 @@ export function CategorySection({ category, allItems, items, filtered }: Props) 
   const g = groupTotals(allItems);
   const limit = category.budget;
   const over = limit != null && g.used > limit;
+  // The whole section accepts drops, so items can be dragged into an empty category too.
+  const { setNodeRef, isOver } = useDroppable({ id: `category:${category.id}` });
 
   return (
-    <section id={`cat-${category.id}`} data-category-id={category.id} className="scroll-mt-20 pt-14">
+    <section ref={setNodeRef} id={`cat-${category.id}`} data-category-id={category.id} className="scroll-mt-20 pt-14">
       <header className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 pb-3">
         <h2 className="display text-[32px] md:text-[40px]">{category.name}</h2>
         <p className="flex items-center gap-2 font-mono text-[12px] text-muted tabular-nums">
@@ -39,12 +43,18 @@ export function CategorySection({ category, allItems, items, filtered }: Props) 
         </div>
       )}
 
-      <ul className="divide-y divide-line border-t border-line">
-        {items.map((item) => (
-          <ItemRow key={item.id} item={item} />
-        ))}
-      </ul>
-      {!items.length && <p className="py-3 text-faint">{filtered ? 'Nothing matches here.' : 'Nothing here yet.'}</p>}
+      <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+        <ul className={cn('divide-y divide-line border-t transition-colors', isOver ? 'border-fg' : 'border-line')}>
+          {items.map((item) => (
+            <ItemRow key={item.id} item={item} />
+          ))}
+        </ul>
+      </SortableContext>
+      {!items.length && (
+        <p className={cn('py-3 transition-colors', isOver ? 'text-fg' : 'text-faint')}>
+          {isOver ? 'Drop here' : filtered ? 'Nothing matches here.' : 'Nothing here yet.'}
+        </p>
+      )}
       <QuickAdd categoryId={category.id} />
     </section>
   );

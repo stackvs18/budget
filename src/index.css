@@ -103,15 +103,15 @@
     align-items: center;
     column-gap: 0.75rem;
     row-gap: 0.125rem;
-    grid-template-columns: auto auto minmax(0, 1fr) 6.5rem auto;
+    grid-template-columns: auto auto auto minmax(0, 1fr) 6.5rem auto auto;
     grid-template-areas:
-      "tick name name   price more"
-      ".    prio status status .";
+      "grip tick name name   price  more del"
+      ".    .    prio status status .    .";
   }
   @media (min-width: 640px) {
     .item-grid {
-      grid-template-columns: auto minmax(0, 1fr) 4.5rem 7.5rem 4.75rem auto;
-      grid-template-areas: "tick name prio price status more";
+      grid-template-columns: auto auto minmax(0, 1fr) 4.5rem 7.5rem 4.75rem auto auto;
+      grid-template-areas: "grip tick name prio price status more del";
     }
   }
   .no-scrollbar {
