@@ -1,0 +1,24 @@
+# Render blueprint for the synced, password-protected version.
+# Needs a paid instance because it uses a persistent disk for data.json.
+# Render asks for BUDGET_PASSWORD when you create the blueprint.
+services:
+  - type: web
+    name: budget-tracker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run serve
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATA_DIR
+        value: /var/data
+      - key: BUDGET_PASSWORD
+        sync: false
+    disk:
+      name: budget-data
+      mountPath: /var/data
+      sizeGB: 1

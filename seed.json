@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "settings": {
+    "title": "Budget",
+    "currency": { "symbol": "₹", "locale": "en-IN", "decimals": 0 },
+    "startBalance": 0,
+    "floor": 0,
+    "budgetMode": "above-floor",
+    "fixedBudget": 0,
+    "warnAt": 15
+  },
+  "display": {
+    "theme": "light",
+    "density": "comfortable",
+    "sort": "manual",
+    "filter": "all"
+  },
+  "incomes": [],
+  "priorities": [
+    { "id": "need", "name": "Need" },
+    { "id": "want", "name": "Want" },
+    { "id": "later", "name": "Later" }
+  ],
+  "categories": [],
+  "items": []
+}

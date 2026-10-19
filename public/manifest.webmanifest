@@ -1,0 +1,12 @@
+{
+  "name": "Budget",
+  "short_name": "Budget",
+  "description": "Price what you want to buy, tick it, and see where your balance lands.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

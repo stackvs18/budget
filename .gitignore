@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Your personal numbers
+data.json
+data.*.json
+*.tmp
