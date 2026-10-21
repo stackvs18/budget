@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import { fetchData, saveData, saveOnExit, type StorageMode } from '@/lib/api';
+import { ServerUnreachable, fetchData, saveData, saveOnExit, type StorageMode } from '@/lib/api';
+import { pickStart, readLocal, writeLocal } from '@/lib/localCopy';
 import { SEED, migrate, uid } from '@/lib/migrate';
 import { moveItem, moveItemToCategory } from '@/lib/reorder';
+import { toast } from '@/store/toasts';
 import type { BudgetData, Category, Display, Income, Item, Priority, Settings } from '@/types';
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -12,6 +14,8 @@ interface BudgetStore {
   saveState: SaveState;
   /** Where data is being saved: data.json via the server, or this browser */
   storage: StorageMode;
+  /** The data server isn't answering; changes are being kept in this browser until it's back */
+  serverDown: boolean;
   /** Generic escape hatch: every action below goes through this. */
   update: (fn: (data: BudgetData) => BudgetData) => void;
 }
@@ -21,6 +25,7 @@ export const useBudget = create<BudgetStore>()((set) => ({
   loadError: false,
   saveState: 'idle',
   storage: 'server',
+  serverDown: false,
   update: (fn) => set((s) => (s.data ? { data: fn(s.data) } : s)),
 }));
 
@@ -34,10 +39,35 @@ const replace = <T extends { id: string }>(list: T[], id: string, patch: Partial
   list.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry));
 
 // ---------- loading & saving ----------
+//
+// Every change is written to a copy in this browser first (instant, can't fail
+// because a server is down), then sent to the data server a moment later.
+// If the server is unreachable, saving keeps retrying and the browser copy is
+// restored on the next load, so nothing typed is ever lost.
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
+let pingTimer: ReturnType<typeof setInterval> | undefined;
 let pending: BudgetData | null = null;
+
+function setServerDown(down: boolean) {
+  if (useBudget.getState().serverDown === down) return;
+  useBudget.setState({ serverDown: down });
+  clearInterval(pingTimer);
+  // While it's down, check every few seconds so saving resumes on its own.
+  if (down) pingTimer = setInterval(() => void reconnect(), 5000);
+}
+
+async function reconnect() {
+  try {
+    const res = await fetch('/api/data', { method: 'GET', cache: 'no-store' });
+    if (!res.ok) return;
+  } catch {
+    return;
+  }
+  setServerDown(false);
+  if (pending) await flush();
+}
 
 async function flush() {
   clearTimeout(saveTimer);
@@ -46,6 +76,9 @@ async function flush() {
   pending = null;
   try {
     await saveData(data);
+    setServerDown(false);
+    // Only mark the browser copy as synced if nothing changed while we were saving.
+    if (!pending && useBudget.getState().data === data) writeLocal(data, true);
     useBudget.setState({ saveState: pending ? 'saving' : 'saved' });
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => {
@@ -54,9 +87,13 @@ async function flush() {
   } catch {
     pending ??= data;
     useBudget.setState({ saveState: 'error' });
-    saveTimer = setTimeout(flush, 4000); // keep retrying quietly
+    if (useBudget.getState().storage === 'server') setServerDown(true);
+    saveTimer = setTimeout(flush, 4000);
   }
 }
+
+/** "Retry now" from the offline banner. */
+export const retrySave = () => (pending ? flush() : reconnect());
 
 let loading: Promise<void> | null = null;
 
@@ -72,24 +109,46 @@ export function retryLoad() {
 }
 
 async function load() {
+  const local = readLocal();
+
+  let result: Awaited<ReturnType<typeof fetchData>>;
   try {
-    const { raw, mode } = await fetchData();
-    const data = migrate(raw ?? structuredClone(SEED));
-    useBudget.setState({ data, loadError: false, storage: mode });
-    // Persist straight away when we created or upgraded the file.
-    if (!raw || (raw as { version?: number }).version !== 2) {
-      pending = data;
-      flush();
+    result = await fetchData();
+  } catch (err) {
+    // Server not running: open the copy from this browser and keep trying to save it.
+    if (err instanceof ServerUnreachable && local) {
+      const data = migrate(local.data);
+      useBudget.setState({ data, loadError: false, storage: 'server', saveState: local.synced ? 'idle' : 'error' });
+      if (!local.synced) pending = data;
+      setServerDown(true);
+      return;
     }
-  } catch {
     useBudget.setState({ loadError: true });
+    return;
+  }
+
+  const { raw, mode } = result;
+  const restoreLocal = mode === 'server' && pickStart(raw, local) === 'local';
+  const data = migrate(restoreLocal ? local!.data : (raw ?? structuredClone(SEED)));
+  useBudget.setState({ data, loadError: false, storage: mode });
+  writeLocal(data, !restoreLocal);
+
+  if (restoreLocal) {
+    pending = data;
+    await flush();
+    toast({ title: 'Recovered', body: 'unsaved changes from last time were saved to data.json' });
+  } else if (!raw || (raw as { version?: number }).version !== 2) {
+    // Persist straight away when we created or upgraded the file.
+    pending = data;
+    void flush();
   }
 }
 
 useBudget.subscribe((state, prev) => {
   if (!prev.data || state.data === prev.data || !state.data) return;
+  writeLocal(state.data, false);
   pending = state.data;
-  if (state.saveState !== 'saving') useBudget.setState({ saveState: 'saving' });
+  if (state.saveState !== 'saving' && state.saveState !== 'error') useBudget.setState({ saveState: 'saving' });
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 450);
 });

@@ -3,6 +3,16 @@ import path from 'node:path';
 import type { Connect, Plugin } from 'vite';
 
 const MAX_BODY = 2_000_000;
+const BACKUP_DAYS = 30;
+
+/** Writes today's backup and prunes old ones. */
+async function backup(dir: string, text: string) {
+  await fs.mkdir(dir, { recursive: true });
+  const day = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  await fs.writeFile(path.join(dir, `data-${day}.json`), text);
+  const files = (await fs.readdir(dir)).filter((f) => /^data-\d{4}-\d{2}-\d{2}\.json$/.test(f)).sort();
+  await Promise.all(files.slice(0, -BACKUP_DAYS).map((f) => fs.rm(path.join(dir, f), { force: true })));
+}
 
 function readBody(req: Connect.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -23,13 +33,13 @@ function readBody(req: Connect.IncomingMessage): Promise<string> {
 /**
  * Middleware for GET/PUT /api/data, backed by data.json in `dataDir`.
  * GET returns `null` when there is no data yet, so the client falls back to seed.json.
- * The first GET of each server run copies data.json to data.backup.json as a restore point.
+ * Every save is stamped with `savedAt` and copied to backups/data-YYYY-MM-DD.json
+ * (the day's last save; the newest BACKUP_DAYS days are kept).
  * Shared by the Vite dev server (below) and the production server (serve.ts).
  */
 export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
   const dataFile = path.join(dataDir, 'data.json');
-  const backupFile = path.join(dataDir, 'data.backup.json');
-  let backedUp = false;
+  const backupDir = path.join(dataDir, 'backups');
 
   return async (req, res, next) => {
     if (req.url?.split('?')[0] !== '/api/data') return next();
@@ -50,10 +60,6 @@ export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
           if ((err as NodeJS.ErrnoException).code === 'ENOENT') return send(200, 'null');
           throw err;
         }
-        if (!backedUp) {
-          await fs.writeFile(backupFile, text);
-          backedUp = true;
-        }
         return send(200, text);
       }
 
@@ -62,6 +68,7 @@ export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
         if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
           return send(400, '"Expected an object with an items array"');
         }
+        data.savedAt = Date.now();
         const text = JSON.stringify(data, null, 2);
         const tmp = `${dataFile}.tmp`;
         await fs.writeFile(tmp, text);
@@ -72,6 +79,7 @@ export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
           await fs.writeFile(dataFile, text);
           await fs.rm(tmp, { force: true });
         }
+        await backup(backupDir, text).catch((err) => console.error('[data-api] backup failed', err));
         return send(204);
       }
 

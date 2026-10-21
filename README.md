@@ -65,22 +65,25 @@ The plan is marked **Tight** when less than 15% of the budget is left (adjustabl
 
 ## Where your data lives
 
-The app picks a storage mode automatically:
-
 | Running as | Saved to | Shared across devices |
 | --- | --- | --- |
-| `npm start` or `npm run serve` | `data.json` in the project folder (or `DATA_DIR`) | Yes, for anyone who can reach the server |
-| A static host (Vercel, Netlify, …) | This browser's local storage | No. Use *Export / Import* to move it |
+| `npm start` / `start.bat` (local) | `data.json` in the project folder, plus a safety copy in the browser | No, it's on your PC |
+| `npm run serve` on a server | `data.json` in `DATA_DIR`, plus a safety copy in the browser | Yes, for anyone with the password |
+| A static host (Vercel, Netlify, …) | This browser only | No. Use *Export / Import* to move it |
 
-The save status in the top bar shows which one is active (*Saved* / *Saved in browser*); click it for backup options.
+**Nothing you type is lost if the server stops.** Every change is written to the browser first, then to `data.json` a moment later. If the server isn't running (say you closed the `start.bat` window), a black banner says so, changes wait in the browser, and they're written to `data.json` as soon as the server is back: either straight away in the same tab, or the next time you open the app ("Recovered").
 
-- Each time the server starts, the previous `data.json` is copied to `data.backup.json`.
-- `data*.json` files are git-ignored, so your numbers are never committed.
+- **Backups:** every save also updates `backups/data-YYYY-MM-DD.json`, one per day, last 30 days. To roll back, stop the app and copy one over `data.json`.
+- **Not on GitHub:** `data.json`, `data.*.json` and `backups/` are git-ignored, so pushing code never uploads your numbers. Back up the project folder (or use *Export backup*) if you want a copy elsewhere.
 - Older files (including the first version's format) are upgraded and validated automatically on load and on import.
 
----
+### Moving to a database later (Vercel)
+
+The app only ever talks to one endpoint: `GET /api/data` returns the plan as JSON (or `null`), and `PUT /api/data` replaces it. Locally that's `server/data-api.ts` writing `data.json`. To deploy on Vercel with a database, add a Vercel Function at `api/data.ts` that implements the same two methods against your database (Neon Postgres, Supabase, Upstash Redis… one JSON row/key is enough), protect it with a password or Vercel's auth, and deploy. The front end needs no changes: when `/api/data` answers with JSON it uses it, and it keeps the browser safety copy either way. Export a backup from the local app and import it after deploying to bring your data across.
 
 ## Deploy
+
+**Full step-by-step guide: [DEPLOY.md](DEPLOY.md)** (local auto-start, Vercel, Vercel + database, Render, your own server, moving data, troubleshooting).
 
 First put the project on GitHub:
 

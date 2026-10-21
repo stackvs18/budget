@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Header } from '@/components/Header';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { ItemsPanel } from '@/components/list/ItemsPanel';
 import { SettingsDrawer } from '@/components/settings/SettingsDrawer';
 import { MobileBar, Summary } from '@/components/summary/Summary';
@@ -27,6 +28,7 @@ function Workspace() {
   return (
     <>
       <Header />
+      <OfflineBanner />
       <main className="grid max-w-[1320px] gap-x-20 gap-y-16 px-6 pt-6 pb-32 md:px-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:pb-20">
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
           <ItemsPanel />

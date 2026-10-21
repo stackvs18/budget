@@ -58,7 +58,7 @@ export function DataSettings() {
         hint={
           storage === 'browser'
             ? "Saved in this browser only, so it isn't shared with your other devices and is lost if you clear site data. Export a backup now and then."
-            : 'Auto-saves to data.json on the server. Each time the server starts, the previous file is copied to data.backup.json.'
+            : 'Every change is saved to data.json in the project folder, with a copy in this browser in case the server is ever not running. One backup per day is kept in backups/ (last 30 days).'
         }
       >
         <div className="grid">
