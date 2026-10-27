@@ -18,9 +18,9 @@ function ToastItem({ toast }: { toast: Toast }) {
   const dismiss = useToasts((s) => s.dismiss);
 
   useEffect(() => {
-    const timer = setTimeout(() => dismiss(toast.id), LIFETIME);
+    const timer = setTimeout(() => dismiss(toast.id), toast.duration ?? LIFETIME);
     return () => clearTimeout(timer);
-  }, [toast.id, dismiss]);
+  }, [toast.id, toast.duration, dismiss]);
 
   return (
     <div className="pointer-events-auto flex max-w-full items-center gap-4 bg-fg py-2 pr-2 pl-4 text-bg">

@@ -7,7 +7,9 @@
  *   HOST             interface to bind (default 127.0.0.1, use 0.0.0.0 on a host like Render)
  *   DATA_DIR         folder that holds data.json (default: the project folder)
  *   BUDGET_PASSWORD  password for the browser login prompt; required when HOST isn't local
+ *   OPEN_BROWSER     set to 1 to open the app in the default browser once it's running
  */
+import { exec } from 'node:child_process';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -113,6 +115,13 @@ http
     });
   })
   .listen(port, host, () => {
-    console.log(`Budget running at http://${isLocal ? 'localhost' : host}:${port}`);
+    const url = `http://${isLocal ? '127.0.0.1' : host}:${port}`;
+    console.log(`Budget running at ${url}`);
     console.log(`Data: ${path.join(dataDir, 'data.json')}${password ? ' · password protected' : ''}`);
+    if (process.env.OPEN_BROWSER === '1') openBrowser(url);
   });
+
+function openBrowser(url: string) {
+  const command = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+  exec(command);
+}

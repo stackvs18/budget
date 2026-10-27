@@ -1,178 +1,204 @@
 # Deployment guide
 
-How to run Budget on your own PC, put it online, and move your data between the two.
+Start by deciding who the app is for:
 
-| Option | Cost | Where data lives | Works across devices | Effort |
-| --- | --- | --- | --- | --- |
-| [1. Local](#1-local-on-your-pc) | Free | `data.json` on your PC | No | None |
-| [2. Vercel, static](#2-vercel-static-free) | Free | Each browser | No | 2 minutes |
-| [3. Vercel + database](#3-vercel--a-database-planned) | Free tiers available | A hosted database | Yes | Needs one API function (planned) |
-| [4. Render](#4-render-with-a-disk) | Paid instance | `data.json` on a Render disk | Yes | 5 minutes |
-| [5. Your own server](#5-your-own-server-or-vps) | Varies | `data.json` on that server | Yes | Some ops |
+| | **Public** (optional) | **Private** |
+| --- | --- | --- |
+| Who | Anyone with the link | Only you |
+| Where it runs | Vercel, as a normal website | Your laptop (or a server you own) |
+| Your data | Stays in each browser that opens it | One copy, synced across your devices |
+| Moving data between devices | Export, then import, every time | Automatic |
+| Who can see your numbers | Nobody (each visitor has their own empty copy) | Only devices you approve |
+| Cost | Free | Free (Tailscale) or paid (always-on server) |
 
-**Recommendation:** use **1** day to day. When you want it on your phone too, go with **3**. Use **2** only if you're fine with each device having its own separate list.
+- **Use Private** if this is your own budget and you want it on your laptop and phone.
+- **Use Public** if you want others to use the app for their own budgets.
 
----
-
-## Before you start
-
-- **Node.js 22.18 or newer** for running or building locally ([nodejs.org](https://nodejs.org)). Hosts use the version in `.nvmrc`.
-- **The code on GitHub.** This project is at `github.com/stackvs18/budget`. Push your latest changes first:
-  ```bash
-  git add -A && git commit -m "Update" && git push
-  ```
-  Your data files (`data.json`, `data.*.json`, `backups/`) are git-ignored and never pushed.
-- **A backup of your data.** In the app: Settings → Data → **Export backup (.json)**. You'll import this file into any online setup.
+You can do both.
 
 ---
 
-## 1. Local, on your PC
+## Contents
 
-```bash
-npm install     # first time only
-npm start       # opens http://127.0.0.1:5050
-```
-
-Or double-click **`start.bat`**.
-
-- Keep the *Budget* terminal window open while you use the app; it's the server that writes `data.json`.
-- If you close it anyway, nothing is lost. A black banner appears, changes are kept in the browser, and they're written to `data.json` as soon as the server runs again.
-- Backups: `backups/data-YYYY-MM-DD.json`, one per day, last 30 days.
-
-**Start it automatically with Windows (optional).**
-1. Press `Win + R`, type `shell:startup`, Enter.
-2. Right-click in that folder → *New → Shortcut* → browse to `start.bat` in the project folder → Finish.
-
-It now starts every time you log in; just open http://127.0.0.1:5050 when you need it.
+1. [Running it on your laptop](#1-running-it-on-your-laptop) (both options start here)
+2. [Public: a website anyone can use (Vercel)](#2-public-a-website-anyone-can-use-vercel)
+3. [Private: just you, on your laptop, phone and any device you choose](#3-private-just-you-on-your-laptop-phone-and-any-device-you-choose)
+   - [Option A: Tailscale (recommended, free)](#option-a-tailscale-recommended-free)
+   - [Option B: Always on, from any browser](#option-b-always-on-from-any-browser)
+4. [Moving your data](#4-moving-your-data)
+5. [Troubleshooting](#5-troubleshooting)
+6. [Security checklist](#6-security-checklist)
 
 ---
 
-## 2. Vercel, static (free)
+## 1. Running it on your laptop
 
-The app works as a plain website. With no data server present, it saves to the browser it's opened in.
+You need **Node.js 22.18 or newer** ([nodejs.org](https://nodejs.org)). Then:
 
+- **Windows:** double-click **`start.bat`**. The first run installs everything; then it opens http://127.0.0.1:5050.
+- **Any OS:** `npm install` once, then `npm run build && npm run serve`.
+
+Your data is saved to **`data.json`** in the project folder, with a backup each day in `backups/` (last 30 days). Both are git-ignored, so pushing code to GitHub never uploads your numbers.
+
+Keep the *Budget* window open while you use the app: it's what writes `data.json`. If you close it, nothing is lost. A black banner appears, changes wait in the browser, and they're saved the moment it's running again.
+
+**Start it with Windows** (recommended for the private setup):
+1. Press `Win + R`, type `shell:startup`, press Enter.
+2. Right-click in that folder → *New → Shortcut* → browse to `start.bat` → *Finish*.
+
+---
+
+## 2. Public: a website anyone can use (Vercel)
+
+A normal Vercel deployment, with nothing else behind it. The app notices there's no data server and saves to the browser it's opened in.
+
+**Each browser and device has its own separate list.** Your phone and laptop don't sync. To move a list to another device you export it there and import it here, every time. That suits other people using the app for themselves. It doesn't suit you keeping one list on several devices; for that, see [Private](#3-private-just-you-on-your-laptop-phone-and-any-device-you-choose).
+
+**Deploy:**
 1. Sign in at [vercel.com](https://vercel.com) with GitHub.
 2. **Add New → Project** → import `stackvs18/budget`.
-3. Leave everything as detected:
-   - Framework: **Vite**
-   - Build command: `npm run build`
-   - Output directory: `dist`
-4. **Deploy.** You get a URL like `budget-xyz.vercel.app`.
-5. Open it → Settings → Data → **Import backup** → pick the file you exported.
+3. Keep the detected settings: framework **Vite**, build `npm run build`, output `dist`.
+4. **Deploy.** You get a URL like `budget-xyz.vercel.app`. Every push to `main` updates it.
 
-Every push to `main` redeploys automatically.
+**Moving a list between devices on the public site:**
+1. On the device that has it: Settings → Data → **Export backup (.json)**.
+2. Send yourself the file (email, Drive, AirDrop…).
+3. On the other device: Settings → Data → **Import backup**. This *replaces* that device's list.
 
-**Know the limits:**
-- Each browser and device has its own copy. Your phone and laptop won't see each other's changes.
-- Clearing site data in that browser deletes the list. Export a backup now and then.
-- The link is safe to share: anyone opening it gets an empty app, never your data.
+**Know before you rely on it:**
+- Clearing the browser's site data (or using a private window) wipes that copy. Export backups regularly.
+- Sharing the link is safe: visitors get an empty app and can never see anyone else's data.
 
-**CLI alternative:**
-```bash
-npx vercel          # first time: links the folder to a Vercel project, makes a preview
-npx vercel --prod   # production deploy
+---
+
+## 3. Private: just you, on your laptop, phone and any device you choose
+
+The goal:
+- One list, the same on every device you approve, with changes showing up everywhere automatically.
+- Nobody else can open it, or even reach it.
+
+| | Option A: Tailscale | Option B: Always-on server |
+| --- | --- | --- |
+| Cost | Free | Paid hosting (Render), or a database service later |
+| Laptop must be on | Yes | No |
+| Works from a device you can't install apps on (a borrowed laptop) | No | Yes, with your password |
+| Who can reach it | Only devices signed into *your* Tailscale account | Anyone can reach the login screen; only you have the password |
+| Status | **Works today** | Render works today; Vercel + database is planned |
+
+### Option A: Tailscale (recommended, free)
+
+[Tailscale](https://tailscale.com) makes a private network out of your own devices. Your laptop keeps running the app exactly as now, and your phone connects to it over that network. Nothing is put on the public internet: to anyone else the address doesn't exist.
+
+**One-time setup:**
+
+1. **Laptop:** install Tailscale from [tailscale.com/download](https://tailscale.com/download) and sign in (Google, Microsoft, GitHub or Apple account). This account *is* your private network, so use one only you control.
+2. **Turn on HTTPS for your network:** open the [admin console → DNS](https://login.tailscale.com/admin/dns). Make sure **MagicDNS** is on, then under **HTTPS Certificates** click **Enable HTTPS**.
+3. **Phone:** install **Tailscale** from the App Store or Play Store, sign in with the **same account**, and switch it on.
+4. **Laptop:** double-click `start.bat` (or let it start with Windows, see [section 1](#1-running-it-on-your-laptop)).
+5. **Laptop:** open a terminal (PowerShell) and run, once:
+   ```powershell
+   tailscale serve --bg 5050
+   ```
+   It prints your private address, like `https://your-laptop.tail1234.ts.net`. Tailscale remembers this, including after restarts. If it says *access denied*, run the terminal as administrator.
+6. **Phone:** open that address. Then add it to your home screen so it opens like an app:
+   - **iPhone (Safari):** Share → **Add to Home Screen**.
+   - **Android (Chrome):** ⋮ → **Add to Home screen** / **Install app**.
+
+That's it. The laptop uses http://127.0.0.1:5050 as usual; the phone uses the `ts.net` address. Both read and write the same `data.json`.
+
+**Adding another device you want:** install Tailscale on it, sign in with your account, open the same address. To take a device's access away: [admin console → Machines](https://login.tailscale.com/admin/machines) → ⋯ → **Remove**.
+
+**Keep the laptop reachable:**
+- Settings → System → Power: set *"When plugged in, put my device to sleep after"* to **Never**. A sleeping laptop can't answer the phone.
+- `start.bat` running (or started with Windows), and Tailscale switched on.
+
+If the laptop is off, the phone shows a banner, keeps your changes on the phone, and saves them the next time you open the app while the laptop is reachable.
+
+**How syncing behaves:**
+- Changes from one device appear on another when you switch back to the app, and every 15 seconds while it's open.
+- If two devices change things at the same moment, the second one to save sees *"Changed on another device"*. It shows the latest, with a **Use mine** button if you'd rather keep that device's version. Nothing is overwritten silently.
+
+**Why this is private:**
+- Only devices signed into your Tailscale account can connect. Everyone else can't reach the laptop at all, so there's no login screen to attack.
+- Traffic between your devices is encrypted (WireGuard), and the address uses HTTPS.
+- **Never run `tailscale funnel`.** Funnel is the opposite of `serve`: it publishes the app to the whole internet.
+
+**Optional extra lock: a password** on top of Tailscale, so even someone who picks up your unlocked phone has to type it:
+```powershell
+setx BUDGET_PASSWORD "a-long-password-only-you-know"
 ```
+Close and reopen `start.bat`. Every device now asks once per browser session (any username, this password). To remove it: `setx BUDGET_PASSWORD ""` and restart `start.bat`.
 
----
+**Turning it off:** `tailscale serve --https=443 off` stops sharing. The app keeps working on the laptop.
 
-## 3. Vercel + a database (planned)
+### Option B: Always on, from any browser
 
-This is the setup for "one list, every device". The front end needs no changes: it only ever calls one endpoint.
+Use this if you want the app while your laptop is off, or from devices where you can't install Tailscale. The app then lives on a server on the internet, and **a password is the only thing protecting it**. Use a long, unique one.
 
-| Request | Does |
-| --- | --- |
-| `GET /api/data` | Returns the whole plan as JSON, or `null` if there isn't one yet |
-| `PUT /api/data` | Replaces the plan with the JSON body; responds `204` |
-
-Locally `server/data-api.ts` answers these by reading and writing `data.json`. On Vercel, a single function at `api/data.ts` answers them with a database instead.
-
-**Steps when we build it:**
-1. **Pick a database.** In Vercel: Storage → **Marketplace**. Any of these works; the plan is one JSON value, so a single key or row is enough.
-   - **Upstash Redis:** simplest, a key/value store.
-   - **Neon Postgres:** a regular SQL database with one table.
-   - **Supabase:** Postgres plus its own auth, if you want proper login later.
-2. **Connect it to the project.** Vercel adds the connection secrets as environment variables automatically.
-3. **Add `api/data.ts`**: GET reads the stored JSON, PUT validates and stores it with a `savedAt` timestamp. About 40 lines.
-4. **Protect it.** Add a `BUDGET_PASSWORD` environment variable and check it in the function (same browser login prompt as option 4), or turn on Vercel's Deployment Protection.
-5. **Deploy**, open the URL, sign in, and **Import backup** to move your data across.
-
-The browser safety copy keeps working there too: if the database or network is briefly unreachable, changes wait in the browser and sync when it's back.
-
-> This isn't built yet. Pick a database and ask, and it'll be added and tested with the same checks as the rest of the app.
-
----
-
-## 4. Render, with a disk
-
-Uses the included [`render.yaml`](render.yaml): a Node web service, a 1 GB persistent disk for `data.json`, a password prompt, and a health check.
-
+**Render (works today, paid):** the repository includes [`render.yaml`](render.yaml), which sets up the server, a disk for `data.json`, HTTPS, and the password prompt.
 1. Sign in at [render.com](https://render.com) with GitHub.
 2. **New → Blueprint** → select `stackvs18/budget`.
-3. When asked for **`BUDGET_PASSWORD`**, enter a long password.
-4. **Apply.** Render builds with `npm ci --include=dev && npm run build` and starts `npm run serve`.
-5. Open the URL. The browser asks for a username (type anything) and the password.
-6. Settings → Data → **Import backup**.
+3. When asked for **`BUDGET_PASSWORD`**, enter a long password (a password manager can generate one).
+4. **Apply.** Open the URL; the browser asks for a username (anything) and the password.
+5. Settings → Data → **Import backup** to bring your list across. Then use this URL on all your devices.
 
-Persistent disks need a paid instance (the blueprint uses `starter`). Free instances lose files on every restart, so don't use one for this.
+Persistent disks need a paid Render instance (the blueprint uses `starter`). The free tier wipes files on restart, so don't use it for this.
 
----
+**Vercel + a database (planned):** the same idea on Vercel. One small function at `api/data.ts` stores the plan in a database (Upstash Redis, Neon Postgres or Supabase via Vercel's Marketplace), behind the same password check. The app needs no other changes. Ask when you want it, and it'll be built and tested like the rest.
 
-## 5. Your own server or VPS
-
-Any Linux box, Raspberry Pi or always-on PC with Node 22.18+:
-
+**Your own always-on machine** (a mini PC, Raspberry Pi or VPS):
 ```bash
 git clone https://github.com/stackvs18/budget.git && cd budget
-npm ci
-npm run build
+npm ci && npm run build
 HOST=0.0.0.0 PORT=8080 DATA_DIR=/srv/budget BUDGET_PASSWORD='a-long-password' npm run serve
 ```
+Put HTTPS in front (Caddy, or a Cloudflare Tunnel) and keep it running with `systemd` or `pm2`. Or skip the public internet entirely and use Tailscale on that machine instead, exactly as in Option A.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PORT` | `5050` | Port to listen on |
-| `HOST` | `127.0.0.1` | `0.0.0.0` to accept outside connections (then a password is required) |
-| `DATA_DIR` | project folder | Where `data.json` and `backups/` live |
-| `BUDGET_PASSWORD` | — | Password for the browser login prompt |
-
-- **Keep it running:** use a process manager such as `systemd` or `pm2 start "npm run serve" --name budget`.
-- **Put HTTPS in front** (Caddy, nginx + Let's Encrypt, or a Cloudflare Tunnel) so the password isn't sent in plain text.
-- **Health check:** `GET /healthz` answers `ok` without a password.
-- **Updating:** `git pull && npm ci && npm run build`, then restart the process. Data in `DATA_DIR` is untouched.
+**On a device that isn't yours:** open the URL in a **private/incognito window**. The browser remembers the password until that window closes, and nothing is left behind afterwards.
 
 ---
 
-## Moving your data
+## 4. Moving your data
 
 | From → to | How |
 | --- | --- |
-| Local → anywhere online | Local app: Settings → Data → **Export backup**. Online app: **Import backup** |
-| Online → local | The reverse, or copy the server's `data.json` into the project folder while the local app is stopped |
-| Roll back a bad day | Stop the app, copy `backups/data-YYYY-MM-DD.json` over `data.json`, start it again |
-| Spreadsheet | Settings → Data → **Export items (.csv)** |
+| Laptop → any other setup | Settings → Data → **Export backup**, then **Import backup** on the other side |
+| Roll back to an earlier day | Stop the app, copy `backups/data-YYYY-MM-DD.json` over `data.json`, start it again |
+| To a spreadsheet | Settings → Data → **Export items (.csv)** |
 
-Imports accept any export from this app, including the first version's format. They're validated and repaired on the way in.
+Imports accept any export from this app, including older formats, and are checked and repaired on the way in.
 
 ---
 
-## Troubleshooting
+## 5. Troubleshooting
 
 | You see | Means | Do |
 | --- | --- | --- |
-| Black banner: *"The app's server isn't running"* | The `start.bat` window (or server process) was closed | Start it again; changes save on their own |
-| *"Saved in browser"* in the top bar | You're on a static host (option 2) | Expected; export backups regularly |
-| *"Your data couldn't load"* | The server isn't running and this browser has no saved copy | Start the server, then **Retry** |
-| `Port 5050 is busy` | Budget is already running, or another app took the port | Use the open one, or close the other app |
-| Server exits: *"Refusing to listen … without BUDGET_PASSWORD"* | `HOST` is public but no password is set | Set `BUDGET_PASSWORD` |
-| Password prompt keeps coming back | Wrong password | Check `BUDGET_PASSWORD` in the host's environment settings |
-| List looks empty after an update | You're on a different browser, device or URL than before | Open the original, or import a backup. Local data is in `data.json` and `backups/` |
+| Black banner: *"The app's server isn't running"* | `start.bat` was closed, or the laptop is asleep or off | Start it again; your changes save automatically |
+| Phone can't open the `ts.net` address | Tailscale is off on the phone, the laptop is asleep, or `start.bat` isn't running | Switch Tailscale on, wake the laptop, check the *Budget* window |
+| `tailscale serve` asks you to enable HTTPS | HTTPS certificates are off for your network | Admin console → DNS → **Enable HTTPS**, then run it again |
+| *"Changed on another device"* | Two devices edited at once | It's showing the latest. Tap **Use mine** to keep this device's version instead |
+| *"Saved in browser"* in the top bar | You're on the public (static) site | Expected. Export backups regularly |
+| `Port 5050 is busy` | Budget is already running (maybe from the startup shortcut) | Use the one that's open |
+| Password prompt keeps coming back | Wrong password | Check `BUDGET_PASSWORD` (`echo %BUDGET_PASSWORD%` on Windows, or the host's settings) |
+| List looks empty | You opened a different setup: the public site instead of your private address, or another browser | Use your private address. Your data is in `data.json` and `backups/` on the laptop |
 
 ---
 
-## Checklist before putting it online
+## 6. Security checklist
 
-- [ ] Data exported from the local app
-- [ ] `npm run check` passes (typecheck, tests, build); CI runs this on every push
-- [ ] For options 4–5: a long `BUDGET_PASSWORD`, and HTTPS in front
-- [ ] For options 3–5: open the URL in a private window and confirm it asks for the password
-- [ ] Data imported and visible on a second device (options 3–5)
+**Private with Tailscale**
+- [ ] The Tailscale account is one only you can sign in to, ideally with two-factor authentication.
+- [ ] Only your own devices appear under admin console → Machines.
+- [ ] You used `tailscale serve`, **not** `tailscale funnel`.
+- [ ] Optional: `BUDGET_PASSWORD` set for an extra lock.
+
+**Private on an always-on server**
+- [ ] A long, unique `BUDGET_PASSWORD` (from a password manager).
+- [ ] The URL opens with `https://` and asks for the password in a private window.
+- [ ] You don't share the URL. The page also tells search engines not to index it.
+- [ ] Borrowed devices: private window only.
+
+**Everywhere**
+- [ ] `data.json`, `data.*.json` and `backups/` stay git-ignored (they are by default).
+- [ ] Occasional Export backup kept somewhere safe.

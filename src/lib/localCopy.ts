@@ -13,6 +13,14 @@ export interface LocalCopy {
   savedAt: number;
   /** True once the server has confirmed it has this exact data */
   synced: boolean;
+  /** The server version (its savedAt) these changes were made on top of */
+  base?: number;
+}
+
+/** The server's version stamp on a saved plan, or 0 if it has none. */
+export function savedAtOf(raw: unknown): number {
+  const value = raw && typeof raw === 'object' ? (raw as { savedAt?: unknown }).savedAt : undefined;
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 export function readLocal(): LocalCopy | null {
@@ -27,9 +35,9 @@ export function readLocal(): LocalCopy | null {
 }
 
 /** Returns false when the browser blocks storage (e.g. some private windows). */
-export function writeLocal(data: unknown, synced: boolean): boolean {
+export function writeLocal(data: unknown, synced: boolean, base: number): boolean {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ data, savedAt: Date.now(), synced } satisfies LocalCopy));
+    localStorage.setItem(KEY, JSON.stringify({ data, savedAt: Date.now(), synced, base } satisfies LocalCopy));
     return true;
   } catch {
     return false;
@@ -37,14 +45,15 @@ export function writeLocal(data: unknown, synced: boolean): boolean {
 }
 
 /**
- * Picks what to open with. The browser copy wins only when it holds changes
- * the server never received and is newer than what the server has.
+ * Picks what to open with, given what the server has and this browser's copy.
+ * - server:   nothing unsaved here
+ * - local:    unsaved changes here, and the server hasn't changed since they were made
+ * - conflict: unsaved changes here, but another device has saved since
  */
-export function pickStart(server: unknown, local: LocalCopy | null): 'server' | 'local' {
+export function pickStart(server: unknown, local: LocalCopy | null): 'server' | 'local' | 'conflict' {
   if (!local || local.synced) return 'server';
-  const serverSavedAt =
-    server && typeof server === 'object' && typeof (server as { savedAt?: unknown }).savedAt === 'number'
-      ? (server as { savedAt: number }).savedAt
-      : 0;
-  return local.savedAt > serverSavedAt ? 'local' : 'server';
+  const serverSavedAt = savedAtOf(server);
+  // Copies written before versions were tracked: fall back to "newest wins".
+  const base = local.base ?? (local.savedAt > serverSavedAt ? serverSavedAt : -1);
+  return serverSavedAt <= base ? 'local' : 'conflict';
 }

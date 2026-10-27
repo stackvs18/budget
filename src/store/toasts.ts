@@ -5,6 +5,8 @@ export interface Toast {
   title: string;
   body?: string;
   action?: { label: string; run: () => void };
+  /** How long it stays up, in ms (default 5s) */
+  duration?: number;
 }
 
 interface ToastStore {

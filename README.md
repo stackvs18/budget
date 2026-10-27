@@ -16,12 +16,16 @@
 
 Requires **Node.js 22.18 or newer** ([nodejs.org](https://nodejs.org)).
 
+On Windows, double-click **`start.bat`**: it installs dependencies the first time, then opens http://127.0.0.1:5050. Keep its window open while you use the app.
+
+Elsewhere:
+
 ```bash
 npm install
-npm start          # opens http://127.0.0.1:5050
+npm run build && npm run serve    # http://127.0.0.1:5050
 ```
 
-On Windows you can double-click **`start.bat`** instead: it installs dependencies the first time, then starts the app.
+For working on the code, `npm start` runs the Vite dev server with hot reload on the same port (don't run both at once).
 
 ## Using it
 
@@ -67,7 +71,7 @@ The plan is marked **Tight** when less than 15% of the budget is left (adjustabl
 
 | Running as | Saved to | Shared across devices |
 | --- | --- | --- |
-| `npm start` / `start.bat` (local) | `data.json` in the project folder, plus a safety copy in the browser | No, it's on your PC |
+| `start.bat` / `npm run serve` (local) | `data.json` in the project folder, plus a safety copy in the browser | Yes, with your other devices over Tailscale (see DEPLOY.md) |
 | `npm run serve` on a server | `data.json` in `DATA_DIR`, plus a safety copy in the browser | Yes, for anyone with the password |
 | A static host (Vercel, Netlify, …) | This browser only | No. Use *Export / Import* to move it |
 
@@ -75,6 +79,7 @@ The plan is marked **Tight** when less than 15% of the budget is left (adjustabl
 
 - **Backups:** every save also updates `backups/data-YYYY-MM-DD.json`, one per day, last 30 days. To roll back, stop the app and copy one over `data.json`.
 - **Not on GitHub:** `data.json`, `data.*.json` and `backups/` are git-ignored, so pushing code never uploads your numbers. Back up the project folder (or use *Export backup*) if you want a copy elsewhere.
+- **Several devices:** each device picks up the others' changes when you return to it (and every 15 s). If two devices save at once, the second sees *"Changed on another device"* with a **Use mine** option, so nothing is overwritten silently.
 - Older files (including the first version's format) are upgraded and validated automatically on load and on import.
 
 ### Moving to a database later (Vercel)
@@ -83,62 +88,16 @@ The app only ever talks to one endpoint: `GET /api/data` returns the plan as JSO
 
 ## Deploy
 
-**Full step-by-step guide: [DEPLOY.md](DEPLOY.md)** (local auto-start, Vercel, Vercel + database, Render, your own server, moving data, troubleshooting).
+**Step-by-step guide: [DEPLOY.md](DEPLOY.md).** In short:
 
-First put the project on GitHub:
-
-```bash
-git init
-git add .
-git commit -m "Budget tracker"
-gh repo create budget-tracker --private --source . --push    # or create the repo on github.com and push
-```
-
-Then pick one of these:
-
-| | Static host | Your own server |
+| | Public (optional) | Private |
 | --- | --- | --- |
-| Examples | Vercel, Netlify, Cloudflare Pages | Render, Railway, a VPS, a home server |
-| Cost | Free | Render needs a paid instance for the disk |
-| Data | In each browser, private to that device | One `data.json`, synced across your devices |
-| Login | Not needed (nobody else can see your data) | Password prompt (`BUDGET_PASSWORD`) |
+| For | Anyone who wants to use the app | Just you, on your laptop, phone and any device you approve |
+| How | A normal Vercel deployment | Your laptop runs the app; your devices reach it over [Tailscale](https://tailscale.com) (free), or an always-on server with a password |
+| Data | In each browser; move it with Export/Import | One `data.json`, synced automatically |
+| Who sees it | Each visitor sees only their own copy | Only devices signed into your account |
 
-### Option A: Vercel (static, free)
-
-1. Go to [vercel.com/new](https://vercel.com/new) and import the repository.
-2. Leave the defaults. Vercel detects Vite (build `npm run build`, output `dist`).
-3. Deploy. Every push to `main` redeploys.
-
-Netlify and Cloudflare Pages work the same way: build command `npm run build`, publish directory `dist`. The Node version comes from `.nvmrc`.
-
-The data lives in each visitor's own browser, so sharing the link shares an empty app, never your numbers. Export a backup now and then: clearing site data clears the plan.
-
-### Option B: Render (synced, password protected)
-
-The repository includes a [`render.yaml`](render.yaml) blueprint: a Node web service, a 1 GB persistent disk for `data.json`, and a password.
-
-1. In Render, choose **New → Blueprint** and select the repository.
-2. Enter a strong **`BUDGET_PASSWORD`** when asked.
-3. Deploy. Open the URL; your browser asks for a username (anything) and that password.
-
-### Option C: any machine with Node
-
-```bash
-npm ci
-npm run build
-HOST=0.0.0.0 PORT=8080 DATA_DIR=/srv/budget BUDGET_PASSWORD='choose-a-long-one' npm run serve
-```
-
-Put it behind HTTPS (Caddy, nginx, a Cloudflare Tunnel…) so the password isn't sent in plain text.
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `5050` | Port to listen on |
-| `HOST` | `127.0.0.1` | Interface to bind. Anything other than localhost requires a password |
-| `DATA_DIR` | project folder | Where `data.json` and `data.backup.json` are kept |
-| `BUDGET_PASSWORD` | – | Password for the browser login prompt |
-
-The server refuses to start on a public interface without `BUDGET_PASSWORD`, serves `/healthz` (unauthenticated) for uptime checks, and caches hashed assets for a year.
+The production server (`npm run serve`) takes `PORT`, `HOST`, `DATA_DIR`, `BUDGET_PASSWORD` and `OPEN_BROWSER`. It refuses to listen on a public interface without a password, and serves `/healthz` for uptime checks.
 
 ---
 

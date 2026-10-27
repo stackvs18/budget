@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { ServerUnreachable, fetchData, saveData, saveOnExit, type StorageMode } from '@/lib/api';
-import { pickStart, readLocal, writeLocal } from '@/lib/localCopy';
+import { SaveConflict, ServerUnreachable, fetchData, saveData, saveOnExit, type StorageMode } from '@/lib/api';
+import { pickStart, readLocal, savedAtOf, writeLocal } from '@/lib/localCopy';
 import { SEED, migrate, uid } from '@/lib/migrate';
 import { moveItem, moveItemToCategory } from '@/lib/reorder';
 import { toast } from '@/store/toasts';
@@ -44,11 +44,22 @@ const replace = <T extends { id: string }>(list: T[], id: string, patch: Partial
 // because a server is down), then sent to the data server a moment later.
 // If the server is unreachable, saving keeps retrying and the browser copy is
 // restored on the next load, so nothing typed is ever lost.
+//
+// Several devices can share one server. Each save says which server version it
+// was made on (`base`); if another device saved in between, the server refuses
+// instead of overwriting, and this device shows the latest with a "Use mine" option.
+// Devices also pull in changes when you return to them, and every few seconds.
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 let pingTimer: ReturnType<typeof setInterval> | undefined;
 let pending: BudgetData | null = null;
+/** Server version (savedAt) the data on screen is based on */
+let base = 0;
+/** Set while replacing the data with the server's, so it isn't saved straight back */
+let applyingRemote = false;
+
+const REFRESH_MS = 15_000;
 
 function setServerDown(down: boolean) {
   if (useBudget.getState().serverDown === down) return;
@@ -69,22 +80,45 @@ async function reconnect() {
   if (pending) await flush();
 }
 
+/** Shows what the server has, without saving it back. */
+function applyRemote(raw: unknown) {
+  const data = migrate(raw);
+  base = savedAtOf(raw);
+  applyingRemote = true;
+  useBudget.setState({ data });
+  applyingRemote = false;
+  writeLocal(data, true, base);
+}
+
+/** Offers to put this device's version back after it lost to another device's save. */
+function offerMine(mine: BudgetData, title: string, body: string) {
+  toast({ title, body, duration: 20_000, action: { label: 'Use mine', run: () => useBudget.setState({ data: mine }) } });
+}
+
 async function flush() {
   clearTimeout(saveTimer);
   if (!pending) return;
   const data = pending;
   pending = null;
   try {
-    await saveData(data);
+    const savedAt = await saveData(data, base);
+    base = savedAt;
     setServerDown(false);
     // Only mark the browser copy as synced if nothing changed while we were saving.
-    if (!pending && useBudget.getState().data === data) writeLocal(data, true);
+    if (!pending && useBudget.getState().data === data) writeLocal(data, true, base);
     useBudget.setState({ saveState: pending ? 'saving' : 'saved' });
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => {
       if (useBudget.getState().saveState === 'saved') useBudget.setState({ saveState: 'idle' });
     }, 1800);
-  } catch {
+  } catch (err) {
+    if (err instanceof SaveConflict) {
+      pending = null;
+      applyRemote(err.latest);
+      useBudget.setState({ saveState: 'idle' });
+      offerMine(data, 'Changed on another device', 'showing the latest; your last edit here was not saved');
+      return;
+    }
     pending ??= data;
     useBudget.setState({ saveState: 'error' });
     if (useBudget.getState().storage === 'server') setServerDown(true);
@@ -94,6 +128,18 @@ async function flush() {
 
 /** "Retry now" from the offline banner. */
 export const retrySave = () => (pending ? flush() : reconnect());
+
+/** Pulls in changes saved from another device, unless this one has unsaved edits. */
+async function refreshFromServer() {
+  const s = useBudget.getState();
+  if (!s.data || s.storage !== 'server' || s.serverDown || pending || document.visibilityState !== 'visible') return;
+  try {
+    const { raw } = await fetchData();
+    if (!pending && savedAtOf(raw) > base) applyRemote(raw);
+  } catch {
+    // Unreachable: the next save attempt will notice and show the banner.
+  }
+}
 
 let loading: Promise<void> | null = null;
 
@@ -118,6 +164,7 @@ async function load() {
     // Server not running: open the copy from this browser and keep trying to save it.
     if (err instanceof ServerUnreachable && local) {
       const data = migrate(local.data);
+      base = local.base ?? 0;
       useBudget.setState({ data, loadError: false, storage: 'server', saveState: local.synced ? 'idle' : 'error' });
       if (!local.synced) pending = data;
       setServerDown(true);
@@ -128,15 +175,18 @@ async function load() {
   }
 
   const { raw, mode } = result;
-  const restoreLocal = mode === 'server' && pickStart(raw, local) === 'local';
-  const data = migrate(restoreLocal ? local!.data : (raw ?? structuredClone(SEED)));
+  const pick = mode === 'server' ? pickStart(raw, local) : 'server';
+  base = savedAtOf(raw);
+  const data = migrate(pick === 'local' ? local!.data : (raw ?? structuredClone(SEED)));
   useBudget.setState({ data, loadError: false, storage: mode });
-  writeLocal(data, !restoreLocal);
+  writeLocal(data, pick !== 'local', base);
 
-  if (restoreLocal) {
+  if (pick === 'local') {
     pending = data;
     await flush();
-    toast({ title: 'Recovered', body: 'unsaved changes from last time were saved to data.json' });
+    toast({ title: 'Recovered', body: 'unsaved changes from last time were saved' });
+  } else if (pick === 'conflict') {
+    offerMine(migrate(local!.data), 'Updated from another device', 'changes left unsaved on this one were not applied');
   } else if (!raw || (raw as { version?: number }).version !== 2) {
     // Persist straight away when we created or upgraded the file.
     pending = data;
@@ -145,8 +195,8 @@ async function load() {
 }
 
 useBudget.subscribe((state, prev) => {
-  if (!prev.data || state.data === prev.data || !state.data) return;
-  writeLocal(state.data, false);
+  if (applyingRemote || !prev.data || state.data === prev.data || !state.data) return;
+  writeLocal(state.data, false, base);
   pending = state.data;
   if (state.saveState !== 'saving' && state.saveState !== 'error') useBudget.setState({ saveState: 'saving' });
   clearTimeout(saveTimer);
@@ -154,8 +204,13 @@ useBudget.subscribe((state, prev) => {
 });
 
 window.addEventListener('pagehide', () => {
-  if (pending) saveOnExit(pending);
+  if (pending) saveOnExit(pending, base);
 });
+
+// Pick up other devices' changes when you come back to this one, and while it's open.
+document.addEventListener('visibilitychange', () => void refreshFromServer());
+window.addEventListener('focus', () => void refreshFromServer());
+setInterval(() => void refreshFromServer(), REFRESH_MS);
 
 // ---------- actions ----------
 

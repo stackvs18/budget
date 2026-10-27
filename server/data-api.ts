@@ -33,6 +33,8 @@ function readBody(req: Connect.IncomingMessage): Promise<string> {
 /**
  * Middleware for GET/PUT /api/data, backed by data.json in `dataDir`.
  * GET returns `null` when there is no data yet, so the client falls back to seed.json.
+ * PUT with X-Base-Saved-At is refused (409 + the current file) when the file has been
+ * saved since that version, so one device can't silently overwrite another's changes.
  * Every save is stamped with `savedAt` and copied to backups/data-YYYY-MM-DD.json
  * (the day's last save; the newest BACKUP_DAYS days are kept).
  * Shared by the Vite dev server (below) and the production server (serve.ts).
@@ -40,6 +42,19 @@ function readBody(req: Connect.IncomingMessage): Promise<string> {
 export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
   const dataFile = path.join(dataDir, 'data.json');
   const backupDir = path.join(dataDir, 'backups');
+  // Saves run one at a time, so the version check and the write can't interleave.
+  let saving: Promise<unknown> = Promise.resolve();
+
+  const readCurrent = async () => {
+    try {
+      const text = await fs.readFile(dataFile, 'utf8');
+      const savedAt = Number(JSON.parse(text)?.savedAt);
+      return { text, savedAt: Number.isFinite(savedAt) ? savedAt : 0 };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { text: 'null', savedAt: 0 };
+      throw err;
+    }
+  };
 
   return async (req, res, next) => {
     if (req.url?.split('?')[0] !== '/api/data') return next();
@@ -68,19 +83,35 @@ export function createDataHandler(dataDir: string): Connect.NextHandleFunction {
         if (!data || typeof data !== 'object' || !Array.isArray(data.items)) {
           return send(400, '"Expected an object with an items array"');
         }
-        data.savedAt = Date.now();
-        const text = JSON.stringify(data, null, 2);
-        const tmp = `${dataFile}.tmp`;
-        await fs.writeFile(tmp, text);
-        try {
-          await fs.rename(tmp, dataFile); // atomic swap, so a crash never leaves half a file
-        } catch {
-          // Windows can refuse the swap while another program has data.json open.
-          await fs.writeFile(dataFile, text);
-          await fs.rm(tmp, { force: true });
-        }
-        await backup(backupDir, text).catch((err) => console.error('[data-api] backup failed', err));
-        return send(204);
+        const header = req.headers['x-base-saved-at'];
+        const base = typeof header === 'string' ? Number(header) : NaN;
+
+        type Outcome = { conflict: string } | { savedAt: number };
+        const result = saving.catch(() => {}).then(async (): Promise<Outcome> => {
+          // Made on an older version than the file: another device saved in between.
+          // Hand back the newer copy instead of overwriting it.
+          const current = await readCurrent();
+          if (Number.isFinite(base) && current.savedAt > base) return { conflict: current.text };
+
+          data.savedAt = Math.max(Date.now(), current.savedAt + 1);
+          const text = JSON.stringify(data, null, 2);
+          const tmp = `${dataFile}.tmp`;
+          await fs.writeFile(tmp, text);
+          try {
+            await fs.rename(tmp, dataFile); // atomic swap, so a crash never leaves half a file
+          } catch {
+            // Windows can refuse the swap while another program has data.json open.
+            await fs.writeFile(dataFile, text);
+            await fs.rm(tmp, { force: true });
+          }
+          await backup(backupDir, text).catch((err) => console.error('[data-api] backup failed', err));
+          return { savedAt: data.savedAt as number };
+        });
+        saving = result;
+
+        const outcome = await result;
+        if ('conflict' in outcome) return send(409, outcome.conflict);
+        return send(200, JSON.stringify({ savedAt: outcome.savedAt }));
       }
 
       send(405, '"Method not allowed"');
