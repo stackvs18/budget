@@ -42,7 +42,7 @@ For working on the code, `npm start` runs the Vite dev server with hot reload on
 | Set your balance | Click *Starting balance* or *Lowest I'll go* in the right column. |
 | Jump to a category | Click its name in the right column. |
 
-Price fields accept numbers only. Grouping is added for you (`15000` shows as `₹15,000`).
+Price fields accept a number or a quick sum: type `199*2+2-1` and press **Enter** to get `399` (press Enter again to add the item or move on). `+ - * /`, brackets, `x`/`×`, `÷` and `%` all work, so a 10% discount on two ₹199 tees after ₹131 of wallet balance is `(199*2-131)*90%` (or `90*(199*2-131)/100`). Letters are ignored. Grouping is added for you (`15000` shows as `₹15,000`).
 
 ### How the numbers work
 

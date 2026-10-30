@@ -33,7 +33,6 @@ describe('price input', () => {
     expect(inr.sanitize('abc')).toBe('');
     expect(inr.sanitize('6k')).toBe('6');
     expect(inr.sanitize('₹6,000')).toBe('6000');
-    expect(inr.sanitize('12-3+4e5')).toBe('12345');
   });
 
   it('allows a single decimal mark only when decimals are on', () => {
@@ -55,5 +54,51 @@ describe('price input', () => {
     expect(inr2.parse('.')).toBeNull();
     expect(inr2.parse('99.5')).toBe(99.5);
     expect(eur.parse('1234,5')).toBe(1234.5);
+  });
+});
+
+describe('sums in price fields', () => {
+  it('calculates with normal precedence', () => {
+    expect(inr.parse('199*2+2-1')).toBe(399);
+    expect(inr.parse('199*2+1-1')).toBe(398);
+    expect(inr.parse('(100+50)*2')).toBe(300);
+    expect(inr.parse('1000/4')).toBe(250);
+    expect(inr.parse('2+3*4')).toBe(14);
+  });
+
+  it('accepts x, × and ÷ and ignores spaces and grouping commas', () => {
+    expect(inr.parse('199 x 2')).toBe(398);
+    expect(inr.parse('199×2')).toBe(398);
+    expect(inr.parse('600÷3')).toBe(200);
+    expect(inr.parse('1,000 + 500')).toBe(1500);
+  });
+
+  it('works out discounts and wallet balances', () => {
+    // 2 tees at 199, minus 131 Amazon Pay balance, then 10% off
+    expect(inr.parse('90*(199*2-131)/100')).toBe(240);
+    expect(inr2.parse('90*(199*2-131)/100')).toBe(240.3);
+    expect(inr.parse('(199*2-131)*90%')).toBe(240);
+    expect(inr.parse('1000-10%*1000')).toBe(900);
+    expect(inr.parse('50%')).toBe(1);
+  });
+
+  it('rounds to the currency decimals', () => {
+    expect(inr.parse('100/3')).toBe(33);
+    expect(inr2.parse('100/3')).toBe(33.33);
+    expect(eur.parse('1,5*2')).toBe(3);
+  });
+
+  it('rejects unfinished, invalid or negative sums', () => {
+    expect(inr.parse('199*2+')).toBeNull();
+    expect(inr.parse('(1+2')).toBeNull();
+    expect(inr.parse('5/0')).toBeNull();
+    expect(inr.parse('1-5')).toBeNull();
+    expect(inr.parse('**')).toBeNull();
+  });
+
+  it('keeps operators but drops letters', () => {
+    expect(inr.sanitize('199*2+abc2')).toBe('199*2+2');
+    expect(inr.isExpression('199')).toBe(false);
+    expect(inr.isExpression('199*2')).toBe(true);
   });
 });

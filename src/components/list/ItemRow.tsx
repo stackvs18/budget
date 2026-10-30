@@ -93,16 +93,17 @@ export const ItemRow = memo(function ItemRow({ item }: { item: Item }) {
           )}
         </div>
 
-        <select
+        <Select
           value={item.priorityId}
-          aria-label="Priority"
+          aria-label={`Priority of ${item.name}`}
           onChange={(e) => actions.updateItem(item.id, { priorityId: e.target.value })}
-          className="h-8 min-w-0 appearance-none justify-self-start bg-transparent font-mono text-[11px] text-muted uppercase outline-none [grid-area:prio] hover:text-fg"
+          className="w-28 [grid-area:prio] sm:w-full"
+          selectClassName="h-8 border-line text-sm"
         >
           {priorities.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
+        </Select>
 
         <MoneyInput
           value={item.price}

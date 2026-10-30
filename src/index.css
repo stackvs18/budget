@@ -110,7 +110,7 @@
   }
   @media (min-width: 640px) {
     .item-grid {
-      grid-template-columns: auto auto minmax(0, 1fr) 4.5rem 7.5rem 4.75rem auto auto;
+      grid-template-columns: auto auto minmax(0, 1fr) 7rem 7.5rem 4.75rem auto auto;
       grid-template-areas: "grip tick name prio price status more del";
     }
   }

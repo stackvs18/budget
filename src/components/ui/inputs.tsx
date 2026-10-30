@@ -19,13 +19,15 @@ interface MoneyInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'v
 }
 
 /**
- * Numbers only. Shows "₹6,000" at rest and the bare number ("6000") while editing.
- * Letters and symbols are dropped as you type; totals update on every keystroke.
+ * Numbers, or a sum like "199*2+2-1". Shows "₹6,000" at rest and the bare number while editing.
+ * Letters are dropped as you type; totals update on every keystroke. For a sum, Enter shows
+ * the result (a second Enter does the field's usual thing: add the item, next price…).
  */
-export function MoneyInput({ value, onValueChange, className, onFocus, onBlur, ...rest }: MoneyInputProps) {
+export function MoneyInput({ value, onValueChange, className, onFocus, onBlur, onKeyDown, title, ...rest }: MoneyInputProps) {
   const fmt = useFormatter();
   const display = (v: number | null) => (v == null ? '' : fmt.money(v));
   const [text, setText] = useState(() => display(value));
+  const [invalid, setInvalid] = useState(false);
   const focused = useRef(false);
 
   useEffect(() => {
@@ -49,15 +51,35 @@ export function MoneyInput({ value, onValueChange, className, onFocus, onBlur, .
       }}
       onBlur={(e) => {
         focused.current = false;
+        setInvalid(false);
         setText(display(value));
         onBlur?.(e);
       }}
       onChange={(e) => {
         const clean = fmt.sanitize(e.target.value);
         setText(clean);
-        onValueChange(fmt.parse(clean));
+        setInvalid(false);
+        const parsed = fmt.parse(clean);
+        // A half-typed sum ("199*2+") keeps the last amount that added up.
+        if (!fmt.isExpression(clean) || parsed != null) onValueChange(parsed);
       }}
-      className={cn(fieldClass, 'text-right tabular-nums', className)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && fmt.isExpression(text)) {
+          e.preventDefault();
+          const result = fmt.parse(text);
+          if (result == null) {
+            setInvalid(true);
+          } else {
+            onValueChange(result);
+            setText(fmt.edit(result));
+          }
+          return;
+        }
+        onKeyDown?.(e);
+      }}
+      aria-invalid={invalid || undefined}
+      title={invalid ? "That sum doesn't add up. Check it and press Enter again." : (title ?? 'A number, or a sum like 199*2+50 (Enter to calculate)')}
+      className={cn(fieldClass, 'text-right tabular-nums', invalid && 'border-dashed border-fg', className)}
       {...rest}
     />
   );
